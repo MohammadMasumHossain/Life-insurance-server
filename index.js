@@ -1,3 +1,4 @@
+// server.js
 const express = require('express');
 const cors = require('cors');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
@@ -9,7 +10,7 @@ const port = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// MongoDB connection URI with environment variables
+// MongoDB connection URI
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.da72plu.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 // MongoDB client setup
@@ -23,19 +24,25 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    // Connect to MongoDB cluster
     await client.connect();
     console.log('Connected to MongoDB successfully!');
 
     const db = client.db('life-insurance');
     const usersCollection = db.collection('users');
     const policiesCollection = db.collection('policies');
-    const applicationsCollection = db.collection('applications');  // Collection for applications
+    const applicationsCollection = db.collection('applications');
+    const reviewsCollection = db.collection('reviews');
 
-    // Get all users
+    // ---------------- USERS ----------------
+
+    // Get all users (optionally filter by role, case-insensitive)
     app.get('/users', async (req, res) => {
       try {
-        const users = await usersCollection.find().toArray();
+        const { role } = req.query;
+        const filter = role
+          ? { role: { $regex: new RegExp(`^${role}$`, 'i') } }
+          : {};
+        const users = await usersCollection.find(filter).sort({ createdAt: -1 }).toArray();
         res.json(users);
       } catch (error) {
         console.error('Failed to fetch users:', error);
@@ -43,16 +50,81 @@ async function run() {
       }
     });
 
-    // Get policies with pagination and optional category filter
+    // Create a user
+    app.post('/users', async (req, res) => {
+      const { email, name, role = 'customer', photo } = req.body;
+      if (!email || !name) {
+        return res.status(400).json({ message: 'Name and email are required' });
+      }
+
+      try {
+        const existingUser = await usersCollection.findOne({ email });
+        if (existingUser) {
+          return res.status(409).json({ message: 'User already exists' });
+        }
+
+        const result = await usersCollection.insertOne({
+          email,
+          name,
+          role,
+          photo,
+          createdAt: new Date(),
+        });
+        res.status(201).json({ message: 'User created', insertedId: result.insertedId });
+      } catch (err) {
+        console.error('Failed to create user:', err);
+        res.status(500).json({ message: 'Internal Server Error' });
+      }
+    });
+
+    // Update user role
+    app.patch('/users/:id/role', async (req, res) => {
+      const { id } = req.params;
+      const { role } = req.body;
+
+      if (!ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid user id' });
+      if (!['customer', 'agent', 'admin'].includes(role)) {
+        return res.status(400).json({ message: 'Invalid role' });
+      }
+
+      try {
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { role } }
+        );
+        if (result.matchedCount === 0) return res.status(404).json({ message: 'User not found' });
+        res.json({ message: 'Role updated successfully' });
+      } catch (err) {
+        console.error('Failed to update role:', err);
+        res.status(500).json({ message: 'Internal Server Error' });
+      }
+    });
+
+    // Delete a user (optional)
+    app.delete('/users/:id', async (req, res) => {
+      const { id } = req.params;
+      if (!ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid user id' });
+
+      try {
+        const result = await usersCollection.deleteOne({ _id: new ObjectId(id) });
+        if (result.deletedCount === 0) return res.status(404).json({ message: 'User not found' });
+        res.json({ message: 'User deleted successfully' });
+      } catch (err) {
+        console.error('Failed to delete user:', err);
+        res.status(500).json({ message: 'Internal Server Error' });
+      }
+    });
+
+    // ---------------- POLICIES ----------------
+
     app.get('/policies', async (req, res) => {
       try {
         const page = Math.max(1, parseInt(req.query.page)) || 1;
-        const limit = Math.min(Math.max(1, parseInt(req.query.limit)), 50) || 9; // max 50 per page
+        const limit = Math.min(Math.max(1, parseInt(req.query.limit)), 50) || 9;
         const skip = (page - 1) * limit;
         const category = req.query.category;
 
         const filter = category && category !== 'All' ? { category } : {};
-
         const total = await policiesCollection.countDocuments(filter);
         const data = await policiesCollection.find(filter).skip(skip).limit(limit).toArray();
 
@@ -63,10 +135,8 @@ async function run() {
       }
     });
 
-    // Get a single policy by ID
     app.get('/policies/:id', async (req, res) => {
       const { id } = req.params;
-
       if (!ObjectId.isValid(id)) {
         return res.status(400).json({ message: 'Invalid policy ID format' });
       }
@@ -83,41 +153,18 @@ async function run() {
       }
     });
 
-    // POST a user (create if doesn't exist)
-    app.post('/users', async (req, res) => {
-      const { email, name, role = 'customer', photo } = req.body;
+    // ---------------- APPLICATIONS ----------------
 
-      if (!email || !name) {
-        return res.status(400).json({ message: 'Name and email are required' });
-      }
-
-      const existingUser = await usersCollection.findOne({ email });
-
-      if (existingUser) {
-        return res.status(409).json({ message: 'User already exists' });
-      }
-
-      const result = await usersCollection.insertOne({ email, name, role, photo });
-      res.status(201).json({ message: 'User created', insertedId: result.insertedId });
-    });
-
-    // POST insurance application form data
+    // Create an application
     app.post('/applications', async (req, res) => {
       const application = req.body;
-
       if (!application.fullName || !application.email) {
         return res.status(400).json({ message: 'Full Name and Email are required' });
       }
 
       try {
-        // Add submittedAt timestamp if not present
-        if (!application.submittedAt) {
-          application.submittedAt = new Date();
-        }
-        // Default status to Pending if not provided
-        if (!application.status) {
-          application.status = 'Pending';
-        }
+        application.submittedAt = application.submittedAt || new Date();
+        application.status = application.status || 'Pending';
 
         const result = await applicationsCollection.insertOne(application);
         res.status(201).json({ message: 'Application submitted', insertedId: result.insertedId });
@@ -127,9 +174,165 @@ async function run() {
       }
     });
 
+    /**
+     * If ?email= is present -> return only that user's applications (Customer MyPolicy)
+     * Else -> return all applications (Admin ManageApplications)
+     */
+    app.get('/applications', async (req, res) => {
+      try {
+        const { email } = req.query;
+        let filter = {};
+        if (email) {
+          filter = { email: { $regex: new RegExp(`^${email}$`, 'i') } };
+        }
+        const applications = await applicationsCollection
+          .find(filter)
+          .sort({ submittedAt: -1 })
+          .toArray();
+        res.json(applications);
+      } catch (error) {
+        console.error('Failed to fetch applications:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+      }
+    });
+
+    app.get('/applications/:id', async (req, res) => {
+      const { id } = req.params;
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ message: 'Invalid application ID format' });
+      }
+      try {
+        const application = await applicationsCollection.findOne({ _id: new ObjectId(id) });
+        if (!application) {
+          return res.status(404).json({ message: 'Application not found' });
+        }
+        res.json(application);
+      } catch (error) {
+        console.error('Failed to fetch application:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+      }
+    });
+
+    // Update application status
+    app.patch('/applications/:id/status', async (req, res) => {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ message: 'Invalid application id' });
+      }
+      if (!['Pending', 'Approved', 'Rejected'].includes(status)) {
+        return res.status(400).json({ message: 'Invalid status' });
+      }
+
+      try {
+        const result = await applicationsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { status } }
+        );
+        if (result.matchedCount === 0) {
+          return res.status(404).json({ message: 'Application not found' });
+        }
+        res.json({ message: 'Status updated successfully' });
+      } catch (error) {
+        console.error('Failed to update status:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+      }
+    });
+
+    // Assign an agent (derive from DB, ignore agentName/email to avoid spoofing)
+    app.patch('/applications/:id/assign-agent', async (req, res) => {
+      const { id } = req.params;
+      const { agentId } = req.body;
+
+      if (!ObjectId.isValid(id) || !ObjectId.isValid(agentId)) {
+        return res.status(400).json({ message: 'Invalid id(s)' });
+      }
+
+      try {
+        const agent = await usersCollection.findOne({
+          _id: new ObjectId(agentId),
+          role: { $regex: /^agent$/i },
+        });
+
+        if (!agent) {
+          return res.status(404).json({ message: 'Agent not found' });
+        }
+
+        const update = {
+          assignedAgent: {
+            id: agent._id,
+            name: agent.name,
+            email: agent.email,
+          },
+        };
+
+        const result = await applicationsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: update }
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).json({ message: 'Application not found' });
+        }
+
+        res.json({ message: 'Agent assigned successfully' });
+      } catch (error) {
+        console.error('Failed to assign agent:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+      }
+    });
+
+    // ---------------- REVIEWS ----------------
+
+    // Create a review
+    app.post('/reviews', async (req, res) => {
+      const { email, policyId, policyTitle, rating, feedback } = req.body;
+      if (!email || !policyId || !policyTitle || !rating || !feedback) {
+        return res.status(400).json({ message: 'All fields are required' });
+      }
+
+      try {
+        const review = {
+          email,
+          policyId: new ObjectId(policyId),
+          policyTitle,
+          rating: parseInt(rating, 10),
+          feedback,
+          createdAt: new Date(),
+        };
+
+        const result = await reviewsCollection.insertOne(review);
+        res.status(201).json({ message: 'Review submitted', insertedId: result.insertedId });
+      } catch (error) {
+        console.error('Failed to save review:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+      }
+    });
+
+    // Get latest reviews (for homepage / testimonials)
+    app.get('/reviews', async (req, res) => {
+      try {
+        const reviews = await reviewsCollection
+          .find({})
+          .sort({ createdAt: -1 })
+          .limit(20)
+          .toArray();
+        res.json(reviews);
+      } catch (error) {
+        console.error('Failed to fetch reviews:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+      }
+    });
+
+    // --------------- Health Check ---------------
+    app.get('/health', (req, res) => {
+      res.json({ ok: true, time: new Date() });
+    });
+
   } catch (err) {
     console.error('MongoDB connection failed:', err);
-    process.exit(1); // Exit process with failure code
+    process.exit(1);
   }
 }
 
