@@ -364,7 +364,7 @@ async function run() {
       }
     });
 
-    // Update application status
+    // Update application status (generic/admin)
     app.patch('/applications/:id/status', async (req, res) => {
       const { id } = req.params;
       const { status } = req.body;
@@ -430,6 +430,73 @@ async function run() {
         res.json({ message: 'Agent assigned successfully' });
       } catch (error) {
         console.error('Failed to assign agent:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+      }
+    });
+
+    // ---------------- AGENT ENDPOINTS (NEW) ----------------
+
+    // Get all applications assigned to an agent (by agentId or email)
+    app.get('/agent/applications', async (req, res) => {
+      try {
+        const { agentId, email } = req.query;
+
+        if (!agentId && !email) {
+          return res.status(400).json({ message: "agentId or email is required" });
+        }
+
+        const filter = agentId
+          ? { 'assignedAgent.id': toObjectId(agentId) }
+          : { 'assignedAgent.email': { $regex: new RegExp(`^${email}$`, 'i') } };
+
+        const apps = await applicationsCollection
+          .find(filter)
+          .sort({ submittedAt: -1 })
+          .toArray();
+
+        res.json(apps);
+      } catch (err) {
+        console.error('Failed to fetch assigned applications:', err);
+        res.status(500).json({ message: 'Internal Server Error' });
+      }
+    });
+
+    // Agent updates application status; if Approved (from non-Approved), increment policy popularity
+    app.patch('/agent/applications/:id/status', async (req, res) => {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      if (!isValidObjectId(id)) {
+        return res.status(400).json({ message: 'Invalid application id' });
+      }
+      if (!['Pending', 'Approved', 'Rejected'].includes(status)) {
+        return res.status(400).json({ message: 'Invalid status' });
+      }
+
+      try {
+        const appDoc = await applicationsCollection.findOne({ _id: toObjectId(id) });
+        if (!appDoc) return res.status(404).json({ message: 'Application not found' });
+
+        const prevStatus = appDoc.status;
+
+        // Update the status in the application
+        const updateResult = await applicationsCollection.updateOne(
+          { _id: toObjectId(id) },
+          { $set: { status } }
+        );
+
+        // If transitioning to Approved, bump popularity on the policy
+        if (prevStatus !== 'Approved' && status === 'Approved' && appDoc.policyId) {
+          const policyFilter = isValidObjectId(appDoc.policyId)
+            ? { _id: toObjectId(appDoc.policyId) }
+            : { id: String(appDoc.policyId) }; // In case you stored string ids like "1", "2", "3"
+
+          await policiesCollection.updateOne(policyFilter, { $inc: { popularity: 1 } });
+        }
+
+        res.json({ message: 'Status updated', matched: updateResult.matchedCount });
+      } catch (err) {
+        console.error('Failed to update status (agent):', err);
         res.status(500).json({ message: 'Internal Server Error' });
       }
     });
