@@ -22,6 +22,90 @@ const client = new MongoClient(uri, {
   },
 });
 
+// ----- tiny helpers -----
+const isValidObjectId = (id) => ObjectId.isValid(id);
+const toObjectId = (id) => new ObjectId(id);
+
+// Build a policy object from req.body, safely (no Joi here to keep deps light)
+function buildPolicyFromBody(body, isUpdate = false) {
+  const {
+    title,
+    category,
+    policyType,
+    description,
+    image,
+    coverageAmount,
+    termDuration, // string e.g. "30 years"
+    popularity,
+    eligibility = {},
+    healthConditionsExcluded = [],
+    benefits = {},
+    premiumCalculation = {},
+    paymentOptions = [],
+    termLengthOptions = [],
+    renewable,
+    convertible,
+  } = body;
+
+  // For POST, these must be present
+  if (!isUpdate) {
+    if (!title || !category || !policyType || !description) {
+      return { error: 'title, category, policyType & description are required' };
+    }
+  }
+
+  const doc = {};
+  if (title !== undefined) doc.title = title;
+  if (category !== undefined) doc.category = category;
+  if (policyType !== undefined) doc.policyType = policyType;
+  if (description !== undefined) doc.description = description;
+  if (image !== undefined) doc.image = image;
+
+  if (coverageAmount !== undefined) doc.coverageAmount = Number(coverageAmount);
+  if (termDuration !== undefined) doc.termDuration = termDuration;
+  if (popularity !== undefined) doc.popularity = Number(popularity) || 0;
+
+  if (eligibility !== undefined) {
+    doc.eligibility = {
+      minAge: Number(eligibility.minAge ?? 0),
+      maxAge: Number(eligibility.maxAge ?? 0),
+      residency: eligibility.residency ?? '',
+      medicalExamRequired: !!eligibility.medicalExamRequired,
+    };
+  }
+
+  if (Array.isArray(healthConditionsExcluded)) {
+    doc.healthConditionsExcluded = healthConditionsExcluded;
+  }
+
+  if (benefits !== undefined) {
+    doc.benefits = {
+      deathBenefit: benefits.deathBenefit ?? '',
+      taxBenefits: benefits.taxBenefits ?? '',
+      accidentalDeathRider: !!benefits.accidentalDeathRider,
+      criticalIllnessRider: !!benefits.criticalIllnessRider,
+      waiverOfPremium: benefits.waiverOfPremium ?? '',
+    };
+  }
+
+  if (premiumCalculation !== undefined) {
+    doc.premiumCalculation = {
+      baseRatePerThousand: Number(premiumCalculation.baseRatePerThousand ?? 0),
+      ageFactor: premiumCalculation.ageFactor || {}, // object of ranges -> factor
+      smokerSurchargePercent: Number(premiumCalculation.smokerSurchargePercent ?? 0),
+      formula: premiumCalculation.formula ?? '',
+    };
+  }
+
+  if (Array.isArray(paymentOptions)) doc.paymentOptions = paymentOptions;
+  if (Array.isArray(termLengthOptions)) doc.termLengthOptions = termLengthOptions;
+
+  if (renewable !== undefined) doc.renewable = !!renewable;
+  if (convertible !== undefined) doc.convertible = !!convertible;
+
+  return { doc };
+}
+
 async function run() {
   try {
     await client.connect();
@@ -82,14 +166,14 @@ async function run() {
       const { id } = req.params;
       const { role } = req.body;
 
-      if (!ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid user id' });
+      if (!isValidObjectId(id)) return res.status(400).json({ message: 'Invalid user id' });
       if (!['customer', 'agent', 'admin'].includes(role)) {
         return res.status(400).json({ message: 'Invalid role' });
       }
 
       try {
         const result = await usersCollection.updateOne(
-          { _id: new ObjectId(id) },
+          { _id: toObjectId(id) },
           { $set: { role } }
         );
         if (result.matchedCount === 0) return res.status(404).json({ message: 'User not found' });
@@ -103,10 +187,10 @@ async function run() {
     // Delete a user (optional)
     app.delete('/users/:id', async (req, res) => {
       const { id } = req.params;
-      if (!ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid user id' });
+      if (!isValidObjectId(id)) return res.status(400).json({ message: 'Invalid user id' });
 
       try {
-        const result = await usersCollection.deleteOne({ _id: new ObjectId(id) });
+        const result = await usersCollection.deleteOne({ _id: toObjectId(id) });
         if (result.deletedCount === 0) return res.status(404).json({ message: 'User not found' });
         res.json({ message: 'User deleted successfully' });
       } catch (err) {
@@ -117,6 +201,7 @@ async function run() {
 
     // ---------------- POLICIES ----------------
 
+    // List (with pagination + optional category filter)
     app.get('/policies', async (req, res) => {
       try {
         const page = Math.max(1, parseInt(req.query.page)) || 1;
@@ -135,20 +220,86 @@ async function run() {
       }
     });
 
+    // Get single policy
     app.get('/policies/:id', async (req, res) => {
       const { id } = req.params;
-      if (!ObjectId.isValid(id)) {
+      if (!isValidObjectId(id)) {
         return res.status(400).json({ message: 'Invalid policy ID format' });
       }
 
       try {
-        const policy = await policiesCollection.findOne({ _id: new ObjectId(id) });
+        const policy = await policiesCollection.findOne({ _id: toObjectId(id) });
         if (!policy) {
           return res.status(404).json({ message: 'Policy not found' });
         }
         res.json(policy);
       } catch (error) {
         console.error('Failed to fetch policy by ID:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+      }
+    });
+
+    // Create policy
+    app.post('/policies', async (req, res) => {
+      try {
+        const { error, doc } = buildPolicyFromBody(req.body, false);
+        if (error) return res.status(400).json({ message: error });
+
+        doc.createdAt = new Date();
+        doc.updatedAt = new Date();
+
+        const result = await policiesCollection.insertOne(doc);
+        res.status(201).json({ message: 'Policy created', insertedId: result.insertedId });
+      } catch (error) {
+        console.error('Failed to create policy:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+      }
+    });
+
+    // Update policy (full replace style)
+    app.put('/policies/:id', async (req, res) => {
+      const { id } = req.params;
+      if (!isValidObjectId(id)) {
+        return res.status(400).json({ message: 'Invalid policy ID format' });
+      }
+
+      try {
+        const { error, doc } = buildPolicyFromBody(req.body, true);
+        if (error) return res.status(400).json({ message: error });
+
+        doc.updatedAt = new Date();
+
+        const result = await policiesCollection.updateOne(
+          { _id: toObjectId(id) },
+          { $set: doc }
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).json({ message: 'Policy not found' });
+        }
+
+        res.json({ message: 'Policy updated successfully' });
+      } catch (error) {
+        console.error('Failed to update policy:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+      }
+    });
+
+    // Delete policy
+    app.delete('/policies/:id', async (req, res) => {
+      const { id } = req.params;
+      if (!isValidObjectId(id)) {
+        return res.status(400).json({ message: 'Invalid policy ID format' });
+      }
+
+      try {
+        const result = await policiesCollection.deleteOne({ _id: toObjectId(id) });
+        if (result.deletedCount === 0) {
+          return res.status(404).json({ message: 'Policy not found' });
+        }
+        res.json({ message: 'Policy deleted successfully' });
+      } catch (error) {
+        console.error('Failed to delete policy:', error);
         res.status(500).json({ message: 'Internal Server Error' });
       }
     });
@@ -198,11 +349,11 @@ async function run() {
 
     app.get('/applications/:id', async (req, res) => {
       const { id } = req.params;
-      if (!ObjectId.isValid(id)) {
+      if (!isValidObjectId(id)) {
         return res.status(400).json({ message: 'Invalid application ID format' });
       }
       try {
-        const application = await applicationsCollection.findOne({ _id: new ObjectId(id) });
+        const application = await applicationsCollection.findOne({ _id: toObjectId(id) });
         if (!application) {
           return res.status(404).json({ message: 'Application not found' });
         }
@@ -218,7 +369,7 @@ async function run() {
       const { id } = req.params;
       const { status } = req.body;
 
-      if (!ObjectId.isValid(id)) {
+      if (!isValidObjectId(id)) {
         return res.status(400).json({ message: 'Invalid application id' });
       }
       if (!['Pending', 'Approved', 'Rejected'].includes(status)) {
@@ -227,7 +378,7 @@ async function run() {
 
       try {
         const result = await applicationsCollection.updateOne(
-          { _id: new ObjectId(id) },
+          { _id: toObjectId(id) },
           { $set: { status } }
         );
         if (result.matchedCount === 0) {
@@ -245,13 +396,13 @@ async function run() {
       const { id } = req.params;
       const { agentId } = req.body;
 
-      if (!ObjectId.isValid(id) || !ObjectId.isValid(agentId)) {
+      if (!isValidObjectId(id) || !isValidObjectId(agentId)) {
         return res.status(400).json({ message: 'Invalid id(s)' });
       }
 
       try {
         const agent = await usersCollection.findOne({
-          _id: new ObjectId(agentId),
+          _id: toObjectId(agentId),
           role: { $regex: /^agent$/i },
         });
 
@@ -268,7 +419,7 @@ async function run() {
         };
 
         const result = await applicationsCollection.updateOne(
-          { _id: new ObjectId(id) },
+          { _id: toObjectId(id) },
           { $set: update }
         );
 
@@ -295,7 +446,7 @@ async function run() {
       try {
         const review = {
           email,
-          policyId: new ObjectId(policyId),
+          policyId: toObjectId(policyId),
           policyTitle,
           rating: parseInt(rating, 10),
           feedback,
