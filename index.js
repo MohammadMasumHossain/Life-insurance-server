@@ -1,13 +1,25 @@
 // server.js
+
+
+
 const express = require('express');
 const cors = require('cors');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config();
 
+
+
 const app = express();
 const port = process.env.PORT || 3000;
 
-app.use(cors());
+const Stripe = require('stripe');
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+// app.use(cors());
+app.use(cors({
+  origin: "http://localhost:5173", // your Vite dev server
+  credentials: true,
+}));
 app.use(express.json());
 
 // MongoDB connection URI
@@ -25,6 +37,9 @@ const client = new MongoClient(uri, {
 // ----- tiny helpers -----
 const isValidObjectId = (id) => ObjectId.isValid(id);
 const toObjectId = (id) => new ObjectId(id);
+
+// payment 
+
 
 // Build a policy object from req.body, safely (no Joi here to keep deps light)
 function buildPolicyFromBody(body, isUpdate = false) {
@@ -116,6 +131,308 @@ async function run() {
     const policiesCollection = db.collection('policies');
     const applicationsCollection = db.collection('applications');
     const reviewsCollection = db.collection('reviews');
+    const blogsCollection = db.collection('blogs');
+    const paymentsCollection = db.collection('payments'); // <- NEW
+    const claimsCollection = db.collection("claims");
+ // ------------- ------------
+
+ // ---------------- PAYMENTS ----------------
+
+/**
+ * Create a Stripe PaymentIntent
+ * Body: {
+ *   applicationId: string,
+ *   amountUsdCents: number,
+ *   amountUSD: number,
+ *   amountBDT: number,
+ *   currency: 'usd'
+ * }
+ */
+app.post('/payments/create-intent', async (req, res) => {
+  try {
+    const {
+      applicationId,
+      amountUsdCents,
+      currency = 'usd',
+      amountUSD,
+      amountBDT,
+      frequency,
+    } = req.body;
+
+    if (!applicationId || !amountUsdCents) {
+      return res.status(400).json({ message: 'applicationId & amountUsdCents are required' });
+    }
+    if (!isValidObjectId(applicationId)) {
+      return res.status(400).json({ message: 'Invalid applicationId' });
+    }
+
+    // Ensure the application exists & is Approved
+    const appDoc = await applicationsCollection.findOne({ _id: toObjectId(applicationId) });
+    if (!appDoc) {
+      return res.status(404).json({ message: 'Application not found' });
+    }
+    if (appDoc.status !== 'Approved') {
+      return res.status(400).json({ message: 'Application is not approved for payment' });
+    }
+
+    // Create PaymentIntent in Stripe (USD cents)
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: amountUsdCents,
+      currency,
+      description: `Premium payment for application ${applicationId}`,
+      metadata: {
+        applicationId,
+        amountBDT: amountBDT ?? 0,
+        amountUSD: amountUSD ?? 0,
+        frequency: frequency ?? '',
+      },
+    });
+
+    res.json({ clientSecret: paymentIntent.client_secret });
+  } catch (err) {
+    console.error('Error creating payment intent:', err);
+    res.status(500).json({ message: 'Stripe error' });
+  }
+});
+
+/**
+ * Confirm payment & update DB
+ * Body: {
+ *   applicationId: string,
+ *   paymentIntentId: string,
+ *   amountBDT: number,
+ *   amountUSD: number,
+ *   frequency: 'monthly' | 'yearly',
+ *   status: 'Paid'
+ * }
+ */
+app.post('/payments/confirm', async (req, res) => {
+  try {
+    const {
+      applicationId,
+      paymentIntentId,
+      amountBDT,
+      amountUSD,
+      frequency,
+      status,
+    } = req.body;
+
+    if (!applicationId || !paymentIntentId || !status) {
+      return res.status(400).json({ message: 'applicationId, paymentIntentId & status are required' });
+    }
+    if (!isValidObjectId(applicationId)) {
+      return res.status(400).json({ message: 'Invalid applicationId' });
+    }
+
+    const appDoc = await applicationsCollection.findOne({ _id: toObjectId(applicationId) });
+    if (!appDoc) {
+      return res.status(404).json({ message: 'Application not found' });
+    }
+
+    // (Optional but good) Verify the PI really succeeded on Stripe
+    let intent;
+    try {
+      intent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      if (intent.status !== 'succeeded') {
+        return res.status(400).json({ message: 'PaymentIntent not succeeded on Stripe' });
+      }
+    } catch (e) {
+      console.error('Stripe PI retrieve failed:', e);
+      return res.status(400).json({ message: 'Cannot verify Stripe PaymentIntent' });
+    }
+
+    // Update the application doc
+    const update = {
+      paymentStatus: status, // "Paid"
+      frequency,
+      activatedAt: new Date(),
+      paymentInfo: {
+        paymentIntentId,
+        amountBDT,
+        amountUSD,
+        stripeCurrency: intent.currency,
+        stripeAmount: intent.amount,
+        createdAt: new Date(),
+      },
+    };
+
+    await applicationsCollection.updateOne(
+      { _id: toObjectId(applicationId) },
+      { $set: update }
+    );
+
+    // Save a payment record (optional but recommended)
+    await paymentsCollection.insertOne({
+      applicationId: toObjectId(applicationId),
+      userEmail: appDoc.email,
+      paymentIntentId,
+      amountBDT,
+      amountUSD,
+      frequency,
+      stripe: {
+        id: intent.id,
+        amount: intent.amount,
+        currency: intent.currency,
+        status: intent.status,
+      },
+      createdAt: new Date(),
+    });
+
+    res.json({ ok: true, message: 'Payment confirmed & application updated' });
+  } catch (err) {
+    console.error('Confirm payment failed:', err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+
+    // ---------------- BLOGS (NEW) ----------------
+
+  // ---------------- BLOGS (with image support) ----------------
+
+// GET /blogs?authorEmail=... (admin omits this to get all)
+app.get('/blogs', async (req, res) => {
+  try {
+    const { authorEmail, search, page = 1, limit = 50 } = req.query;
+
+    const filter = {};
+    if (authorEmail) {
+      filter.authorEmail = { $regex: new RegExp(`^${authorEmail}$`, 'i') };
+    }
+    if (search) {
+      filter.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { content: { $regex: search, $options: 'i' } },
+        { author: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    const _page = Math.max(1, parseInt(page)) || 1;
+    const _limit = Math.min(Math.max(1, parseInt(limit)), 100) || 50;
+    const skip = (_page - 1) * _limit;
+
+    const total = await blogsCollection.countDocuments(filter);
+    const items = await blogsCollection
+      .find(filter)
+      .sort({ publishDate: -1 })
+      .skip(skip)
+      .limit(_limit)
+      .toArray();
+
+    res.json({ total, page: _page, limit: _limit, items });
+  } catch (err) {
+    console.error('Failed to fetch blogs:', err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// (Optional, but handy) GET /blogs/:id
+app.get('/blogs/:id', async (req, res) => {
+  const { id } = req.params;
+  if (!isValidObjectId(id)) {
+    return res.status(400).json({ message: 'Invalid blog id' });
+  }
+
+  try {
+    const blog = await blogsCollection.findOne({ _id: toObjectId(id) });
+    if (!blog) return res.status(404).json({ message: 'Blog not found' });
+    res.json(blog);
+  } catch (err) {
+    console.error('Failed to fetch blog by id:', err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// POST /blogs  (now accepts `image`)
+app.post('/blogs', async (req, res) => {
+  try {
+    const { title, content, author, authorEmail, image } = req.body;
+
+    if (!title || !content || !author || !authorEmail) {
+      return res
+        .status(400)
+        .json({ message: 'title, content, author, authorEmail are required' });
+    }
+
+    const blog = {
+      title,
+      content,
+      author,
+      authorEmail: authorEmail.toLowerCase(),
+      image: image || "",          // <-- store the image URL (optional)
+      publishDate: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const result = await blogsCollection.insertOne(blog);
+    res.status(201).json({ ...blog, _id: result.insertedId });
+  } catch (err) {
+    console.error('Failed to create blog:', err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// PATCH /blogs/:id  (can update `image`, optionally republish)
+app.patch('/blogs/:id', async (req, res) => {
+  const { id } = req.params;
+  if (!isValidObjectId(id)) {
+    return res.status(400).json({ message: 'Invalid blog id' });
+  }
+
+  try {
+    const updates = {};
+    const { title, content, image, republish } = req.body;
+
+    if (title !== undefined) updates.title = title;
+    if (content !== undefined) updates.content = content;
+    // You can send `image: ""` to clear it
+    if (image !== undefined) updates.image = image;
+
+    if (republish) {
+      updates.publishDate = new Date();
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ message: 'Nothing to update' });
+    }
+
+    updates.updatedAt = new Date();
+
+    const result = await blogsCollection.updateOne(
+      { _id: toObjectId(id) },
+      { $set: updates }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: 'Blog not found' });
+    }
+
+    res.json({ message: 'Blog updated successfully' });
+  } catch (err) {
+    console.error('Failed to update blog:', err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// DELETE /blogs/:id
+app.delete('/blogs/:id', async (req, res) => {
+  const { id } = req.params;
+  if (!isValidObjectId(id)) {
+    return res.status(400).json({ message: 'Invalid blog id' });
+  }
+
+  try {
+    const result = await blogsCollection.deleteOne({ _id: toObjectId(id) });
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ message: 'Blog not found' });
+    }
+    res.json({ message: 'Blog deleted successfully' });
+  } catch (err) {
+    console.error('Failed to delete blog:', err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
 
     // ---------------- USERS ----------------
 
@@ -542,6 +859,9 @@ async function run() {
         res.status(500).json({ message: 'Internal Server Error' });
       }
     });
+
+    //------------paymetn--------
+
 
     // --------------- Health Check ---------------
     app.get('/health', (req, res) => {
