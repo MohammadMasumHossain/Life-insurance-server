@@ -1155,7 +1155,8 @@ let usersCollection,
   reviewsCollection,
   blogsCollection,
   paymentsCollection,
-  claimsCollection;
+  claimsCollection,
+ newsletterCollection;
 
 async function run() {
   try {
@@ -1169,6 +1170,7 @@ async function run() {
     blogsCollection = db.collection("blogs");
     paymentsCollection = db.collection("payments");
     claimsCollection = db.collection("claims");
+     newsletterCollection = db.collection('newsletterSubscribers');
 
     console.log("✅ Connected to MongoDB");
 
@@ -1394,6 +1396,29 @@ async function run() {
         res.status(500).json({ message: "Internal Server Error" });
       }
     });
+  
+
+    // Newsletter subscription route
+app.post('/newsletter', async (req, res) => {
+  try {
+    const { name, email } = req.body;
+    if (!name || !email) {
+      return res.status(400).json({ message: 'Name and email are required' });
+    }
+
+    // Optionally check if email already subscribed
+    const existing = await newsletterCollection.findOne({ email });
+    if (existing) {
+      return res.status(409).json({ message: 'Email already subscribed' });
+    }
+
+    await newsletterCollection.insertOne({ name, email, subscribedAt: new Date() });
+    res.status(201).json({ message: 'Subscribed successfully' });
+  } catch (error) {
+    console.error('Error saving subscription:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
 
     // ---------------- POLICIES ----------------
     app.get("/policies", async (req, res) => {
