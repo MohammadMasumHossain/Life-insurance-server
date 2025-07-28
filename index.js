@@ -1289,6 +1289,27 @@ async function run() {
     //     res.status(500).json({ message: "Internal Server Error" });
     //   }
     // });
+    app.get("/blogs", async (req, res) => {
+  try {
+    const { authorEmail } = req.query;
+
+    const filter = authorEmail
+      ? { authorEmail: { $regex: new RegExp(`^${authorEmail}$`, "i") } }
+      : {};
+
+    const blogs = await blogsCollection
+      .find(filter)
+      .sort({ publishDate: -1 })
+      .limit(4)
+      .toArray();
+
+    res.json(blogs);
+  } catch (err) {
+    console.error("Failed to fetch blogs:", err);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
 
     app.post("/blogs", async (req, res) => {
       try {
