@@ -1221,6 +1221,29 @@ async function run() {
       }
     });
 
+    // GET: Get user role by email
+        app.get('/users/:email/role', async (req, res) => {
+            try {
+                const email = req.params.email;
+
+                if (!email) {
+                    return res.status(400).send({ message: 'Email is required' });
+                }
+
+                const user = await usersCollection.findOne({ email });
+
+                if (!user) {
+                    return res.status(404).send({ message: 'User not found' });
+                }
+
+                res.send({ role: user.role || 'user' });
+            } catch (error) {
+                console.error('Error getting user role:', error);
+                res.status(500).send({ message: 'Failed to get role' });
+            }
+        });
+
+
     app.patch("/users/:id/role", async (req, res) => {
       const { id } = req.params;
       const { role } = req.body;
@@ -1255,17 +1278,17 @@ async function run() {
     });
 
     // ---------------- BLOGS ----------------
-    app.get("/blogs", async (req, res) => {
-      try {
-        const { authorEmail } = req.query;
-        const filter = authorEmail ? { authorEmail: { $regex: new RegExp(`^${authorEmail}$`, "i") } } : {};
-        const blogs = await blogsCollection.find(filter).sort({ publishDate: -1 }).toArray();
-        res.json(blogs);
-      } catch (err) {
-        console.error("Failed to fetch blogs:", err);
-        res.status(500).json({ message: "Internal Server Error" });
-      }
-    });
+    // app.get("/blogs", async (req, res) => {
+    //   try {
+    //     const { authorEmail } = req.query;
+    //     const filter = authorEmail ? { authorEmail: { $regex: new RegExp(`^${authorEmail}$`, "i") } } : {};
+    //     const blogs = await blogsCollection.find(filter).sort({ publishDate: -1 }).toArray();
+    //     res.json(blogs);
+    //   } catch (err) {
+    //     console.error("Failed to fetch blogs:", err);
+    //     res.status(500).json({ message: "Internal Server Error" });
+    //   }
+    // });
 
     app.post("/blogs", async (req, res) => {
       try {
@@ -1633,43 +1656,78 @@ async function run() {
     });
 
     // ---------------- REVIEWS ----------------
+    // app.post("/reviews", async (req, res) => {
+    //   const { email, policyId, policyTitle, rating, feedback } = req.body;
+    //   if (!email || !policyId || !policyTitle || !rating || !feedback) {
+    //     return res.status(400).json({ message: "All fields are required" });
+    //   }
+
+    //   try {
+    //     const review = {
+    //       email,
+    //       policyId: toObjectId(policyId),
+    //       policyTitle,
+    //       rating: parseInt(rating, 10),
+    //     feedback,
+    //       createdAt: new Date(),
+    //     };
+
+    //     const result = await reviewsCollection.insertOne(review);
+    //     res.status(201).json({ message: "Review submitted", insertedId: result.insertedId });
+    //   } catch (error) {
+    //     console.error("Failed to save review:", error);
+    //     res.status(500).json({ message: "Internal Server Error" });
+    //   }
+    // });
+
     app.post("/reviews", async (req, res) => {
-      const { email, policyId, policyTitle, rating, feedback } = req.body;
-      if (!email || !policyId || !policyTitle || !rating || !feedback) {
-        return res.status(400).json({ message: "All fields are required" });
-      }
+  const { email, policyId, policyTitle, rating, feedback, name, photo } = req.body;
 
-      try {
-        const review = {
-          email,
-          policyId: toObjectId(policyId),
-          policyTitle,
-          rating: parseInt(rating, 10),
-        feedback,
-          createdAt: new Date(),
-        };
+  if (!email || !policyId || !policyTitle || !rating || !feedback || !name || !photo) {
+    return res.status(400).json({ message: "All fields are required" });
+  }
 
-        const result = await reviewsCollection.insertOne(review);
-        res.status(201).json({ message: "Review submitted", insertedId: result.insertedId });
-      } catch (error) {
-        console.error("Failed to save review:", error);
-        res.status(500).json({ message: "Internal Server Error" });
-      }
-    });
+  try {
+    const review = {
+      email,
+      name,
+      photo,
+      policyId: new ObjectId(policyId),
+      policyTitle,
+      rating: parseInt(rating, 10),
+      feedback,
+      createdAt: new Date()
+    };
 
-    app.get("/reviews", async (req, res) => {
-      try {
-        const reviews = await reviewsCollection
-          .find({})
-          .sort({ createdAt: -1 })
-          .limit(20)
-          .toArray();
-        res.json(reviews);
-      } catch (error) {
-        console.error("Failed to fetch reviews:", error);
-        res.status(500).json({ message: "Internal Server Error" });
-      }
-    });
+    const result = await reviewsCollection.insertOne(review);
+    res.status(201).json({ message: "Review submitted", insertedId: result.insertedId });
+  } catch (error) {
+    console.error("Failed to save review:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+
+    
+         // GET: Get latest 5 reviews (can be paginated later)
+app.get('/reviews', async (req, res) => {
+  try {
+    const reviews = await reviewsCollection
+      .find()
+      .sort({ createdAt: -1 }) // most recent first
+      .limit(5)
+      .toArray();
+
+    res.send(reviews);
+  } catch (error) {
+    console.error('Error fetching reviews:', error);
+    res.status(500).send({ message: 'Failed to fetch reviews' });
+  }
+});
+
+
+    
+
 
     // ---------------- CLAIMS ----------------
     // Create claim — now stores coverageAmount (and more) from the application
@@ -2033,6 +2091,7 @@ app.get('/payments/summary', async (req, res) => {
             createdAt: new Date(),
           },
         };
+
 
         await applicationsCollection.updateOne({ _id: toObjectId(applicationId) }, { $set: update });
 
