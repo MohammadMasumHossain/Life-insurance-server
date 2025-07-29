@@ -1,6 +1,4 @@
 
-
-
 require("dotenv").config();
 const cors = require("cors");
 const express = require("express");
@@ -226,7 +224,7 @@ function buildPolicyFromBody(body, isUpdate = false) {
 // ---------- Mongo ----------
 
 
-const uri = "mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.da72plu.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.da72plu.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -1409,7 +1407,7 @@ app.get('/payments/summary', async (req, res) => {
 });
   } catch (err) {
     // console.error("MongoDB connection failed:", err);
-    process.exit(1);
+    // process.exit(1);
   }
 }
 
