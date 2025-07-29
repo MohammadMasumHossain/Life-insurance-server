@@ -61,17 +61,51 @@ app.options("*", cors());
 //   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 // }
 
-app.use("/uploads", express.static(UPLOAD_DIR));
+// app.use("/uploads", express.static(UPLOAD_DIR));
 // ---------- Ensure uploads folder exists ----------
-const UPLOAD_DIR = path.join(process.env.NODE_ENV === 'production' ? '/tmp' : __dirname, "uploads");
+// const UPLOAD_DIR = path.join(process.env.NODE_ENV === 'production' ? '/tmp' : __dirname, "uploads");
+// if (!fs.existsSync(UPLOAD_DIR)) {
+//   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+// }
+
+// // Make sure to also update your static file serving:
+// app.use("/uploads", express.static(UPLOAD_DIR));
+
+// // ---------- Multer ----------
+// const storage = multer.diskStorage({
+//   destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+//   filename: (req, file, cb) => {
+//     const ext = path.extname(file.originalname);
+//     cb(null, `${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`);
+//   },
+// });
+// const fileFilter = (req, file, cb) => {
+//   const allowed = /pdf|jpeg|jpg|png/;
+//   const extOk = allowed.test(path.extname(file.originalname).toLowerCase());
+//   const mimeOk = allowed.test(file.mimetype);
+//   if (extOk && mimeOk) return cb(null, true);
+//   cb(new Error("Only PDF or Image files are allowed!"));
+// };
+// const upload = multer({
+//   storage,
+//   fileFilter,
+//   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+// });
+
+
+const UPLOAD_DIR = path.join(
+  process.env.NODE_ENV === "production" ? "/tmp" : __dirname,
+  "uploads"
+);
+
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
 
-// Make sure to also update your static file serving:
+// Serve static files from the upload directory
 app.use("/uploads", express.static(UPLOAD_DIR));
 
-// ---------- Multer ----------
+// ---------- Multer Storage ----------
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOAD_DIR),
   filename: (req, file, cb) => {
@@ -79,18 +113,32 @@ const storage = multer.diskStorage({
     cb(null, `${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`);
   },
 });
+
+// Allowed extensions regex (with dot and case-insensitive)
+const allowedExt = /\.(pdf|jpeg|jpg|png)$/i;
+
+// Allowed MIME types regex (exact matches)
+const allowedMime = /^(application\/pdf|image\/jpeg|image\/jpg|image\/png)$/i;
+
 const fileFilter = (req, file, cb) => {
-  const allowed = /pdf|jpeg|jpg|png/;
-  const extOk = allowed.test(path.extname(file.originalname).toLowerCase());
-  const mimeOk = allowed.test(file.mimetype);
-  if (extOk && mimeOk) return cb(null, true);
-  cb(new Error("Only PDF or Image files are allowed!"));
+  const extOk = allowedExt.test(path.extname(file.originalname).toLowerCase());
+  const mimeOk = allowedMime.test(file.mimetype);
+
+  if (extOk && mimeOk) {
+    cb(null, true);
+  } else {
+    cb(new Error("Only PDF or Image files are allowed!"));
+  }
 };
+
 const upload = multer({
   storage,
   fileFilter,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
 });
+
+module.exports = { app, upload };
+
 
 // ---------- Helpers ----------
 const isValidObjectId = (id) => ObjectId.isValid(id);
