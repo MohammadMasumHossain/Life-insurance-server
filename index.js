@@ -45,10 +45,7 @@ app.use(express.json());
 // );
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173", // for local dev
-      "https://life-insurance-8c230.web.app", // your frontend in production
-    ],
+    origin: [ "https://life-insurance-8c230.web.app" ],
     credentials: true,
   })
 );
