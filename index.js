@@ -1184,6 +1184,24 @@ async function run() {
       res.json({ ok: true, time: new Date() });
     });
 
+    // ------------agent -----------
+
+    app.get('/agents', async (req, res) => {
+  try {
+    // Fetch 3 users with role 'agent'
+    const agents = await usersCollection
+      .find({ role: 'agent' })
+      .limit(3)
+      .toArray();
+
+    res.json(agents);
+  } catch (error) {
+    console.error('Failed to fetch agents:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+
     // ---------------- USERS ----------------
     app.get("/users", async (req, res) => {
       try {
@@ -1265,6 +1283,104 @@ async function run() {
       }
     });
 
+//   app.patch("/users/:email", async (req, res) => {
+//   const { email } = req.params;
+//   const { name, photo, nid, fatherName, motherName, address } = req.body;
+
+//   // 🛠️ Debugging logs
+//   console.log("Updating user with email:", email);
+//   console.log("Payload received:", req.body);
+
+//   try {
+//     const result = await usersCollection.updateOne(
+//       { email },
+//       {
+//         $set: {
+//           name,
+//           photo,
+//           nid,
+//           fatherName,
+//           motherName,
+//           address,
+//           updatedAt: new Date(),
+//         },
+//       }
+//     );
+
+//     if (result.matchedCount === 0) {
+//       console.warn("No user found with this email.");
+//       return res.status(404).json({ message: "User not found" });
+//     }
+
+//     res.json({ message: "Profile updated" });
+//   } catch (error) {
+//     console.error("Error updating profile:", error.message);
+//     res.status(500).json({ message: "Internal server error" });
+//   }
+// });
+
+
+app.patch("/users/:email", async (req, res) => {
+  const { email } = req.params;
+  const {
+    name,
+    photo,
+    nid,
+    fatherName,
+    motherName,
+    address,
+  } = req.body;
+
+  // 🔍 Log incoming data
+  console.log(`[PATCH] Updating user: ${email}`);
+  console.log("Received payload:", req.body);
+
+  if (!email || typeof email !== "string") {
+    return res.status(400).json({ message: "Invalid email" });
+  }
+
+  // 🧹 Build update object with only defined values
+  const updateFields = {};
+  if (name !== undefined) updateFields.name = name;
+  if (photo !== undefined) updateFields.photo = photo;
+  if (nid !== undefined) updateFields.nid = nid;
+  if (fatherName !== undefined) updateFields.fatherName = fatherName;
+  if (motherName !== undefined) updateFields.motherName = motherName;
+  if (address !== undefined) updateFields.address = address;
+
+  updateFields.updatedAt = new Date();
+
+  try {
+    const result = await usersCollection.updateOne(
+      { email },
+      { $set: updateFields }
+    );
+
+    if (result.matchedCount === 0) {
+      console.warn("❗ No user found with this email.");
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    console.log("✅ User updated successfully");
+    res.json({ message: "Profile updated successfully" });
+  } catch (error) {
+    console.error("❌ Failed to update user profile:", error.message);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+app.get("/users/:email", async (req, res) => {
+  const { email } = req.params;
+  try {
+    const user = await usersCollection.findOne({ email });
+    if (!user) return res.status(404).json({ message: "User not found" });
+    res.json(user);
+  } catch (error) {
+    console.error("Error fetching user:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
     app.delete("/users/:id", async (req, res) => {
       const { id } = req.params;
       if (!isValidObjectId(id)) return res.status(400).json({ message: "Invalid user id" });
@@ -1291,7 +1407,121 @@ async function run() {
     //     res.status(500).json({ message: "Internal Server Error" });
     //   }
     // });
-    app.get("/blogs", async (req, res) => {
+//     app.get("/blogs", async (req, res) => {
+//   try {
+//     const { authorEmail } = req.query;
+
+//     const filter = authorEmail
+//       ? { authorEmail: { $regex: new RegExp(`^${authorEmail}$`, "i") } }
+//       : {};
+
+//     const blogs = await blogsCollection
+//       .find(filter)
+//       .sort({ publishDate: -1 }) // remove .limit(4)
+//       .toArray();
+
+//     res.json(blogs);
+//   } catch (err) {
+//     console.error("Failed to fetch blogs:", err);
+//     res.status(500).json({ message: "Internal Server Error" });
+//   }
+// });
+
+
+// // PATCH /blogs/:id/visit
+// app.patch('/blogs/:id/visit', async (req, res) => {
+//   const { id } = req.params;
+//   await Blog.updateOne({ _id: id }, { $inc: { totalVisit: 1 } });
+//   res.send({ message: 'Visit count updated' });
+// });
+
+
+
+//     app.post("/blogs", async (req, res) => {
+//       try {
+//         const { title, content, authorEmail, authorName, image } = req.body;
+//         if (!title || !content || !authorEmail) {
+//           return res.status(400).json({ message: "title, content and authorEmail are required" });
+//         }
+
+//         const doc = {
+//           title,
+//           content,
+//           authorEmail,
+//           authorName: authorName || "",
+//           image: image || "",
+//           publishDate: new Date(),
+//           createdAt: new Date(),
+//           updatedAt: new Date(),
+//         };
+
+//         const result = await blogsCollection.insertOne(doc);
+//         res.status(201).json({ message: "Blog created", insertedId: result.insertedId });
+//       } catch (err) {
+//         console.error("Failed to create blog:", err);
+//         res.status(500).json({ message: "Internal Server Error" });
+//       }
+//     });
+
+//     app.patch("/blogs/:id", async (req, res) => {
+//       const { id } = req.params;
+//       if (!isValidObjectId(id)) {
+//         return res.status(400).json({ message: "Invalid blog id" });
+//       }
+
+//       try {
+//         const updates = {};
+//         const { title, content, image, republish } = req.body;
+
+//         if (title !== undefined) updates.title = title;
+//         if (content !== undefined) updates.content = content;
+//         if (image !== undefined) updates.image = image;
+
+//         if (republish) {
+//           updates.publishDate = new Date();
+//         }
+
+//         if (Object.keys(updates).length === 0) {
+//           return res.status(400).json({ message: "Nothing to update" });
+//         }
+
+//         updates.updatedAt = new Date();
+
+//         const result = await blogsCollection.updateOne(
+//           { _id: toObjectId(id) },
+//           { $set: updates }
+//         );
+
+//         if (result.matchedCount === 0) {
+//           return res.status(404).json({ message: "Blog not found" });
+//         }
+
+//         res.json({ message: "Blog updated successfully" });
+//       } catch (err) {
+//         console.error("Failed to update blog:", err);
+//         res.status(500).json({ message: "Internal Server Error" });
+//       }
+//     });
+
+//     app.delete("/blogs/:id", async (req, res) => {
+//       const { id } = req.params;
+//       if (!isValidObjectId(id)) {
+//         return res.status(400).json({ message: "Invalid blog id" });
+//       }
+
+//       try {
+//         const result = await blogsCollection.deleteOne({ _id: toObjectId(id) });
+//         if (result.deletedCount === 0) {
+//           return res.status(404).json({ message: "Blog not found" });
+//         }
+//         res.json({ message: "Blog deleted successfully" });
+//       } catch (err) {
+//         console.error("Failed to delete blog:", err);
+//         res.status(500).json({ message: "Internal Server Error" });
+//       }
+//     });
+  
+app.get("/blogs", async (req, res) => {
   try {
     const { authorEmail } = req.query;
 
@@ -1302,7 +1532,6 @@ async function run() {
     const blogs = await blogsCollection
       .find(filter)
       .sort({ publishDate: -1 })
-      .limit(4)
       .toArray();
 
     res.json(blogs);
@@ -1312,91 +1541,109 @@ async function run() {
   }
 });
 
+// =================== CREATE Blog ===================
+app.post("/blogs", async (req, res) => {
+  try {
+    const { title, content, authorEmail, authorName, image } = req.body;
+    if (!title || !content || !authorEmail) {
+      return res.status(400).json({ message: "title, content and authorEmail are required" });
+    }
 
-    app.post("/blogs", async (req, res) => {
-      try {
-        const { title, content, authorEmail, authorName, image } = req.body;
-        if (!title || !content || !authorEmail) {
-          return res.status(400).json({ message: "title, content and authorEmail are required" });
-        }
+    const doc = {
+      title,
+      content,
+      authorEmail,
+      authorName: authorName || "",
+      image: image || "",
+      publishDate: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      totalVisit: 0,
+    };
 
-        const doc = {
-          title,
-          content,
-          authorEmail,
-          authorName: authorName || "",
-          image: image || "",
-          publishDate: new Date(),
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
+    const result = await blogsCollection.insertOne(doc);
+    res.status(201).json({ message: "Blog created", insertedId: result.insertedId });
+  } catch (err) {
+    console.error("Failed to create blog:", err);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
 
-        const result = await blogsCollection.insertOne(doc);
-        res.status(201).json({ message: "Blog created", insertedId: result.insertedId });
-      } catch (err) {
-        console.error("Failed to create blog:", err);
-        res.status(500).json({ message: "Internal Server Error" });
-      }
-    });
+// =================== UPDATE Blog ===================
+app.patch("/blogs/:id", async (req, res) => {
+  const { id } = req.params;
+  if (!isValidObjectId(id)) {
+    return res.status(400).json({ message: "Invalid blog ID" });
+  }
 
-    app.patch("/blogs/:id", async (req, res) => {
-      const { id } = req.params;
-      if (!isValidObjectId(id)) {
-        return res.status(400).json({ message: "Invalid blog id" });
-      }
+  try {
+    const updates = {};
+    const { title, content, image, republish } = req.body;
 
-      try {
-        const updates = {};
-        const { title, content, image, republish } = req.body;
+    if (title !== undefined) updates.title = title;
+    if (content !== undefined) updates.content = content;
+    if (image !== undefined) updates.image = image;
+    if (republish) updates.publishDate = new Date();
 
-        if (title !== undefined) updates.title = title;
-        if (content !== undefined) updates.content = content;
-        if (image !== undefined) updates.image = image;
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ message: "Nothing to update" });
+    }
 
-        if (republish) {
-          updates.publishDate = new Date();
-        }
+    updates.updatedAt = new Date();
 
-        if (Object.keys(updates).length === 0) {
-          return res.status(400).json({ message: "Nothing to update" });
-        }
+    const result = await blogsCollection.updateOne(
+      { _id: toObjectId(id) },
+      { $set: updates }
+    );
 
-        updates.updatedAt = new Date();
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: "Blog not found" });
+    }
 
-        const result = await blogsCollection.updateOne(
-          { _id: toObjectId(id) },
-          { $set: updates }
-        );
+    res.json({ message: "Blog updated successfully" });
+  } catch (err) {
+    console.error("Failed to update blog:", err);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
 
-        if (result.matchedCount === 0) {
-          return res.status(404).json({ message: "Blog not found" });
-        }
+// =================== DELETE Blog ===================
+app.delete("/blogs/:id", async (req, res) => {
+  const { id } = req.params;
+  if (!isValidObjectId(id)) {
+    return res.status(400).json({ message: "Invalid blog ID" });
+  }
 
-        res.json({ message: "Blog updated successfully" });
-      } catch (err) {
-        console.error("Failed to update blog:", err);
-        res.status(500).json({ message: "Internal Server Error" });
-      }
-    });
+  try {
+    const result = await blogsCollection.deleteOne({ _id: toObjectId(id) });
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ message: "Blog not found" });
+    }
+    res.json({ message: "Blog deleted successfully" });
+  } catch (err) {
+    console.error("Failed to delete blog:", err);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
 
-    app.delete("/blogs/:id", async (req, res) => {
-      const { id } = req.params;
-      if (!isValidObjectId(id)) {
-        return res.status(400).json({ message: "Invalid blog id" });
-      }
+// =================== PATCH Visit Count ===================
+app.patch('/blogs/:id/visit', async (req, res) => {
+  const { id } = req.params;
+  if (!isValidObjectId(id)) {
+    return res.status(400).json({ message: "Invalid blog ID" });
+  }
 
-      try {
-        const result = await blogsCollection.deleteOne({ _id: toObjectId(id) });
-        if (result.deletedCount === 0) {
-          return res.status(404).json({ message: "Blog not found" });
-        }
-        res.json({ message: "Blog deleted successfully" });
-      } catch (err) {
-        console.error("Failed to delete blog:", err);
-        res.status(500).json({ message: "Internal Server Error" });
-      }
-    });
-  
+  try {
+    const result = await blogsCollection.updateOne(
+      { _id: toObjectId(id) },
+      { $inc: { totalVisit: 1 } }
+    );
+    res.send({ message: "Visit count updated", result });
+  } catch (err) {
+    console.error("Failed to update visit count:", err);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
 
     // Newsletter subscription route
 app.post('/newsletter', async (req, res) => {
@@ -1421,23 +1668,54 @@ app.post('/newsletter', async (req, res) => {
 });
 
     // ---------------- POLICIES ----------------
+    // app.get("/policies", async (req, res) => {
+    //   try {
+    //     const page = Math.max(1, parseInt(req.query.page)) || 1;
+    //     const limit = Math.min(Math.max(1, parseInt(req.query.limit)), 50) || 9;
+    //     const skip = (page - 1) * limit;
+    //     const category = req.query.category;
+
+    //     const filter = category && category !== "All" ? { category } : {};
+    //     const total = await policiesCollection.countDocuments(filter);
+    //     const data = await policiesCollection.find(filter).skip(skip).limit(limit).toArray();
+
+    //     res.json({ total, page, limit, data });
+    //   } catch (error) {
+    //     console.error("Failed to fetch policies:", error);
+    //     res.status(500).json({ message: "Internal Server Error" });
+    //   }
+    // });
+
     app.get("/policies", async (req, res) => {
-      try {
-        const page = Math.max(1, parseInt(req.query.page)) || 1;
-        const limit = Math.min(Math.max(1, parseInt(req.query.limit)), 50) || 9;
-        const skip = (page - 1) * limit;
-        const category = req.query.category;
+  try {
+    const page = Math.max(1, parseInt(req.query.page)) || 1;
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit)), 50) || 9;
+    const skip = (page - 1) * limit;
+    const category = req.query.category;
+    const search = req.query.search;
 
-        const filter = category && category !== "All" ? { category } : {};
-        const total = await policiesCollection.countDocuments(filter);
-        const data = await policiesCollection.find(filter).skip(skip).limit(limit).toArray();
+    // Build the filter object
+    let filter = {};
 
-        res.json({ total, page, limit, data });
-      } catch (error) {
-        console.error("Failed to fetch policies:", error);
-        res.status(500).json({ message: "Internal Server Error" });
-      }
-    });
+    if (category && category !== "All") {
+      filter.category = category;
+    }
+
+    if (search) {
+      // Case-insensitive regex search on title field
+      filter.title = { $regex: search, $options: "i" };
+    }
+
+    const total = await policiesCollection.countDocuments(filter);
+    const data = await policiesCollection.find(filter).skip(skip).limit(limit).toArray();
+
+    res.json({ total, page, limit, data });
+  } catch (error) {
+    console.error("Failed to fetch policies:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
 
     app.get("/policies/:id", async (req, res) => {
       const { id } = req.params;
@@ -1570,31 +1848,76 @@ app.post('/newsletter', async (req, res) => {
       }
     });
 
+    // app.patch("/applications/:id/status", async (req, res) => {
+    //   const { id } = req.params;
+    //   const { status } = req.body;
+
+    //   if (!isValidObjectId(id)) {
+    //     return res.status(400).json({ message: "Invalid application id" });
+    //   }
+    //   if (!["Pending", "Approved", "Rejected"].includes(status)) {
+    //     return res.status(400).json({ message: "Invalid status" });
+    //   }
+
+    //   try {
+    //     const result = await applicationsCollection.updateOne(
+    //       { _id: toObjectId(id) },
+    //       { $set: { status } }
+    //     );
+    //     if (result.matchedCount === 0) {
+    //       return res.status(404).json({ message: "Application not found" });
+    //     }
+    //     res.json({ message: "Status updated successfully" });
+    //   } catch (error) {
+    //     console.error("Failed to update status:", error);
+    //     res.status(500).json({ message: "Internal Server Error" });
+    //   }
+    // });
+
     app.patch("/applications/:id/status", async (req, res) => {
-      const { id } = req.params;
-      const { status } = req.body;
+  const { id } = req.params;
+  const { status, rejectionFeedback } = req.body;
 
-      if (!isValidObjectId(id)) {
-        return res.status(400).json({ message: "Invalid application id" });
-      }
-      if (!["Pending", "Approved", "Rejected"].includes(status)) {
-        return res.status(400).json({ message: "Invalid status" });
-      }
+  if (!isValidObjectId(id)) {
+    return res.status(400).json({ message: "Invalid application id" });
+  }
 
-      try {
-        const result = await applicationsCollection.updateOne(
-          { _id: toObjectId(id) },
-          { $set: { status } }
-        );
-        if (result.matchedCount === 0) {
-          return res.status(404).json({ message: "Application not found" });
-        }
-        res.json({ message: "Status updated successfully" });
-      } catch (error) {
-        console.error("Failed to update status:", error);
-        res.status(500).json({ message: "Internal Server Error" });
-      }
-    });
+  if (!["Pending", "Approved", "Rejected"].includes(status)) {
+    return res.status(400).json({ message: "Invalid status" });
+  }
+
+  // If status is Rejected, rejectionFeedback should be provided (optional but recommended)
+  if (status === "Rejected" && (!rejectionFeedback || rejectionFeedback.trim() === "")) {
+    return res.status(400).json({ message: "Rejection feedback is required when rejecting" });
+  }
+
+  try {
+    // Build update object dynamically
+    const updateFields = { status };
+
+    if (status === "Rejected") {
+      updateFields.rejectionFeedback = rejectionFeedback.trim();
+    } else {
+      // Clear rejectionFeedback if status is not Rejected
+      updateFields.rejectionFeedback = "";
+    }
+
+    const result = await applicationsCollection.updateOne(
+      { _id: toObjectId(id) },
+      { $set: updateFields }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: "Application not found" });
+    }
+
+    res.json({ message: "Status updated successfully" });
+  } catch (error) {
+    console.error("Failed to update status:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
 
     // Assign an agent
     app.patch("/applications/:id/assign-agent", async (req, res) => {
@@ -1638,6 +1961,9 @@ app.post('/newsletter', async (req, res) => {
         res.status(500).json({ message: "Internal Server Error" });
       }
     });
+
+
+    
 
     // ---------------- AGENT ENDPOINTS ----------------
     app.get("/agent/applications", async (req, res) => {
