@@ -37,12 +37,24 @@ admin.initializeApp({
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 app.use(express.json());
 // ---------- Middlewares ----------
+// app.use(
+//   cors({
+//     origin: ["http://localhost:5173","https://life-insurance-8c230.web.app"], // add more origins if you deploy
+//     credentials: true,
+//   })
+// );
 app.use(
   cors({
-    origin: ["http://localhost:5173","https://life-insurance-8c230.web.app"], // add more origins if you deploy
+    origin: [
+      "http://localhost:5173", // for local dev
+      "https://life-insurance-8c230.web.app", // your frontend in production
+    ],
     credentials: true,
   })
 );
+
+// Optional for OPTIONS preflight (helpful)
+app.options("*", cors());
 
 
 // ---------- Ensure uploads folder exists ----------
