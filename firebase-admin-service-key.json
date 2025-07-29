@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "life-insurance-8c230",
+  "private_key_id": "e7922ba3f2865845cd7ce6728c2e8f0e9ff3b50d",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCqgqE5C+e/vc1w\nOeDB1+tRP8RA+FwNhOXBQaBiX07UZFtVewugkd+OuhrdbbC0IxbFjOr5hWkRZswg\n9oo37QMGp8mT0bys8cyNXZ1BdTUSbVBIPki/rAV+Zbk7Hg8TMhxsjWmAVO11lsOO\n37qmGBGXXLSEX/jJFNN+l1NzKidZp/7zxdKJebYHUbh57U5sZQNC/tJBH2eZb0Lq\nrUyRGfVgtXZYS/li9juPbWoNvXbVYoY+O9spOzwdAJs9UlU/8wiPGC6PDCW0Z1wc\n1gDhuPN5+AmWqN39MQXsE0Z9RkSMDsyUWyWFW9HGv124YE0KJCNqpfqOjEp6syN0\nncNZnHS5AgMBAAECggEACdXm76PZioiL7A40oi3esbU+UHqbEb8Roz4SPrZtdUg0\nMgg63Zhoh0LCN7Vi+OMgxkS4javlyYaO3hRmmO8Dqou9b5jMu8OnZ1yn7G2SwgU6\n+S3Zk6/cMcQzpP65AyQT+mmGVUwg1fR8Q5axfTD8e8kR0yR3lP7N69qWClm7Qxs6\n0WNCu8gp7GJ9JmaIp6KqROITv2AiXoRneRVThdxlggMha2KoO7KKJVwFkgZ84F89\nhY4Cz9MfmOWM7rbWxVIG9kGK4exxrMl1QL32LvcPCdDVr6Mywq6hYFnZccGPyh0R\nuKsfTdRgapCmEQVKEPyBeuug4QuA3ng9k2NaQesVUQKBgQDqPxYYtx2uMTnGCj9F\nbcKY9jiIu0wCkpGWllovLKRmZ/R0QBy7+Z12NpkemvOwfqQ+ZAPOBEaxYuGz27DC\n4sV3S63fpLLQqu4PV4ut6ak7HdJN+ZpPc1z+B/1WuRa1rdmfJA6p4LylOMx5QmUL\nTdHWwRGsbAz92fh/JtCH6NlO8QKBgQC6WEvvWZupzm4vCNiIchj82ws7e6AQi/Bf\nXC9i5HXfQftTm+73o0cxE5N8F5w3LwbzDsqaOrSjYAUqYzIXfLBnuXbx+6d7D+GQ\n8wT4BR+BuEuE+9g+ypuo841uP40IC9V8anF5044eKO0EdpEcdH43ihMWUJZhTyE2\n/VlSnZgSSQKBgFi95aUfWkMvqu932lh3KI3CWdCTBEzFMhqWgzvz8aRKJbYUw84C\n1sB+Fqwdj8yBbb+lLDvUKuPwzgjRZbmvJ5f2N7zOLGAZIW72f5g3OUGIHrAjq24G\nCmjCphtAq3XQku1TP6rj1RPS3MPjf1w08xYktolXteRFu3qQPdf/QrRBAoGAAZ+h\nUb2LIKiexyQhlta/pvxVlbgXBe3iM0J/WzI4YLCXevwB0gCHL0NHZq5h+w0a12VK\nmJtoVYARq3PfzNqWQuEXyzXxGJ5jzbqAUZTh2GR9q/Pxx2JGhutQUSSWmvpXatUW\nlgQk2dhrcD2EOCY/r0YxsmETXletJ2h/rbuXxpkCgYAIjmxtMl5GrMB41XSm1gaE\nNDQL5ep5kJbHXiqGCDalaeFgA2cBXORFPzrh0TypLTp+OUoW4ZO5urESJy1/WDmk\nXxewaiHBu0yI7jKvj8vv4T8LstnWaqcPluGrUA+vy1lBqTbukDsy26aRySXC1yXo\nCdoqG5n7SSpvfTL83NmzLg==\n-----END PRIVATE KEY-----\n",
+  "client_email": "firebase-adminsdk-fbsvc@life-insurance-8c230.iam.gserviceaccount.com",
+  "client_id": "114032307759811712026",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40life-insurance-8c230.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
