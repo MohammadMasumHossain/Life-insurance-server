@@ -1,8 +1,6 @@
-
 require("dotenv").config();
 const cors = require("cors");
 const express = require("express");
-const app = express();
 var admin = require("firebase-admin");
 
 const fs = require("fs");
@@ -27,6 +25,7 @@ admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
 });
 }
+const app = express();
 
 
 
@@ -35,21 +34,21 @@ admin.initializeApp({
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 app.use(express.json());
 // ---------- Middlewares ----------
-// app.use(
-//   cors({
-//     origin: ["http://localhost:5173","https://life-insurance-8c230.web.app"], // add more origins if you deploy
-//     credentials: true,
-//   })
-// );
 app.use(
   cors({
-    origin: [ "https://life-insurance-8c230.web.app" ],
+    origin: ["http://localhost:5173","https://life-insurance-8c230.web.app"], // add more origins if you deploy
     credentials: true,
   })
 );
+// app.use(
+//   cors({
+//     origin: [ "https://life-insurance-8c230.web.app" ],
+//     credentials: true,
+//   })
+// );
 
 // Optional for OPTIONS preflight (helpful)
-app.options("*", cors());
+// app.options("*", cors());
 
 
 // ---------- Ensure uploads folder exists ----------
@@ -91,51 +90,7 @@ app.options("*", cors());
 // });
 
 
-const UPLOAD_DIR = path.join(
-  process.env.NODE_ENV === "production" ? "/tmp" : __dirname,
-  "uploads"
-);
-
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
-
-// Serve static files from the upload directory
-app.use("/uploads", express.static(UPLOAD_DIR));
-
-// ---------- Multer Storage ----------
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`);
-  },
-});
-
-// Allowed extensions regex (with dot and case-insensitive)
-const allowedExt = /\.(pdf|jpeg|jpg|png)$/i;
-
-// Allowed MIME types regex (exact matches)
-const allowedMime = /^(application\/pdf|image\/jpeg|image\/jpg|image\/png)$/i;
-
-const fileFilter = (req, file, cb) => {
-  const extOk = allowedExt.test(path.extname(file.originalname).toLowerCase());
-  const mimeOk = allowedMime.test(file.mimetype);
-
-  if (extOk && mimeOk) {
-    cb(null, true);
-  } else {
-    cb(new Error("Only PDF or Image files are allowed!"));
-  }
-};
-
-const upload = multer({
-  storage,
-  fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
-});
-
-module.exports = { app, upload };
+// module.exports = { app, upload };
 
 
 // ---------- Helpers ----------
@@ -242,8 +197,8 @@ let usersCollection,
   claimsCollection,
  newsletterCollection;
 
-async function run() {
-  try {
+// async function run() {
+//   try {
     // await client.connect();
     const db = client.db(process.env.DB_NAME || "life-insurance");
 
@@ -1009,47 +964,47 @@ app.get('/reviews', async (req, res) => {
 
     // ---------------- CLAIMS ----------------
     // Create claim — now stores coverageAmount (and more) from the application
-    app.post("/claims", upload.single("file"), async (req, res) => {
-      try {
-        const { applicationId, policyName, email, reason } = req.body;
+    // app.post("/claims", upload.single("file"), async (req, res) => {
+    //   try {
+    //     const { applicationId, policyName, email, reason } = req.body;
 
-        if (!applicationId || !policyName || !email || !reason) {
-          return res.status(400).json({ message: "All fields are required" });
-        }
-        if (!isValidObjectId(applicationId)) {
-          return res.status(400).json({ message: "Invalid applicationId" });
-        }
+    //     if (!applicationId || !policyName || !email || !reason) {
+    //       return res.status(400).json({ message: "All fields are required" });
+    //     }
+    //     if (!isValidObjectId(applicationId)) {
+    //       return res.status(400).json({ message: "Invalid applicationId" });
+    //     }
 
-        // pull coverageAmount, termDuration, policyType from application
-        const appDoc = await applicationsCollection.findOne(
-          { _id: toObjectId(applicationId) },
-          { projection: { coverageAmount: 1, termDuration: 1, policyType: 1 } }
-        );
-        if (!appDoc) {
-          return res.status(404).json({ message: "Application not found" });
-        }
+    //     // pull coverageAmount, termDuration, policyType from application
+    //     const appDoc = await applicationsCollection.findOne(
+    //       { _id: toObjectId(applicationId) },
+    //       { projection: { coverageAmount: 1, termDuration: 1, policyType: 1 } }
+    //     );
+    //     if (!appDoc) {
+    //       return res.status(404).json({ message: "Application not found" });
+    //     }
 
-        const claimDoc = {
-          applicationId: toObjectId(applicationId),
-          policyName,
-          email,
-          reason,
-          status: "Pending",
-          coverageAmount: appDoc.coverageAmount ?? null,
-          termDuration: appDoc.termDuration ?? null,
-          policyType: appDoc.policyType ?? null,
-          filePath: req.file ? `/uploads/${req.file.filename}` : null,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
+    //     const claimDoc = {
+    //       applicationId: toObjectId(applicationId),
+    //       policyName,
+    //       email,
+    //       reason,
+    //       status: "Pending",
+    //       coverageAmount: appDoc.coverageAmount ?? null,
+    //       termDuration: appDoc.termDuration ?? null,
+    //       policyType: appDoc.policyType ?? null,
+    //       filePath: req.file ? `/uploads/${req.file.filename}` : null,
+    //       createdAt: new Date(),
+    //       updatedAt: new Date(),
+    //     };
 
-        const result = await claimsCollection.insertOne(claimDoc);
-        res.status(201).json({ message: "Claim submitted", insertedId: result.insertedId });
-      } catch (err) {
-        console.error("Create claim failed:", err);
-        res.status(500).json({ message: "Internal Server Error" });
-      }
-    });
+    //     const result = await claimsCollection.insertOne(claimDoc);
+    //     res.status(201).json({ message: "Claim submitted", insertedId: result.insertedId });
+    //   } catch (err) {
+    //     console.error("Create claim failed:", err);
+    //     res.status(500).json({ message: "Internal Server Error" });
+    //   }
+    // });
 
     // Get claims — enrich old ones that don't have coverageAmount
     app.get("/claims", async (req, res) => {
@@ -1405,12 +1360,12 @@ app.get('/payments/summary', async (req, res) => {
    app.listen(port, () => {
     console.log(`Server is listening on port ${port}`);
 });
-  } catch (err) {
-    // console.error("MongoDB connection failed:", err);
-    // process.exit(1);
-  }
-}
+//   } catch (err) {
+//     // console.error("MongoDB connection failed:", err);
+//     process.exit(1);
+//   }
+// }
 
-run().catch(console.dir);
+// run().catch(console.dir);
 
-// ---------- Global error handler ----------
+
